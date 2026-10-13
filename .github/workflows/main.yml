@@ -20,19 +20,38 @@ jobs:
           java-version: '17'
           distribution: temurin
 
+      - name: Configure iOS signing
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("ios/build.gradle")
+          content = path.read_text()
+
+          old = "iosSkipSigning = false"
+          new = "iosSkipSigning = true"
+
+          if old not in content:
+              raise SystemExit(
+                  "Não encontrei iosSkipSigning = false em ios/build.gradle"
+              )
+
+          path.write_text(content.replace(old, new, 1))
+          print("Assinatura automática desativada para o build.")
+          PY
+
       - name: Build Mindustry
         run: |
           chmod +x gradlew
           ./gradlew :tools:pack
-          ./gradlew createIPA
+          ./gradlew :ios:createIPA
 
       - name: Locate IPA
         if: always()
         run: |
-          echo "=== Procurando arquivos IPA ==="
+          echo "=== Arquivos IPA encontrados ==="
           find "$GITHUB_WORKSPACE" -type f -iname "*.ipa" -print
-          echo "=== Procurando diretórios de build ==="
-          find "$GITHUB_WORKSPACE" -maxdepth 4 -type d -name build -print
+          echo "=== Fim da busca ==="
 
       - name: Upload IPA
         if: success()
