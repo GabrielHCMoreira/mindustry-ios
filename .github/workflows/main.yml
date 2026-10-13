@@ -1,4 +1,4 @@
-```yaml
+
 name: Build Mindustry iOS
 
 on:
@@ -7,6 +7,7 @@ on:
 
 jobs:
   build:
+    name: Build IPA
     runs-on: macos-latest
 
     steps:
@@ -19,18 +20,21 @@ jobs:
           java-version: '17'
           distribution: temurin
 
-      - name: Build IPA
+      - name: Build Mindustry
         run: |
           chmod +x gradlew
           ./gradlew :tools:pack
           ./gradlew createIPA
+
+      - name: Locate IPA
+        if: always()
+        run: |
+          find . -type f -name "*.ipa" -print
 
       - name: Upload IPA
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Mindustry-IPA
-          path: |
-            **/*.ipa
+          path: "**/*.ipa"
           if-no-files-found: error
-```
