@@ -29,7 +29,10 @@ jobs:
       - name: Locate IPA
         if: always()
         run: |
-          find . -type f -name "*.ipa" -print
+          echo "=== Procurando arquivos IPA ==="
+          find "$GITHUB_WORKSPACE" -type f -iname "*.ipa" -print
+          echo "=== Procurando diretórios de build ==="
+          find "$GITHUB_WORKSPACE" -maxdepth 4 -type d -name build -print
 
       - name: Upload IPA
         if: success()
