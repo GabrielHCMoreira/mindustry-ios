@@ -1,25 +1,36 @@
+```yaml
 name: Build Mindustry iOS
-on: [push, workflow_dispatch]
+
+on:
+  push:
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: macos-latest
+
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Set up JDK 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
-          distribution: 'temurin'
-      
+          distribution: temurin
+
       - name: Build IPA
         run: |
           chmod +x gradlew
           ./gradlew :tools:pack
           ./gradlew createIPA
-          
+
       - name: Upload IPA
-        uses: actions/upload-artifact@v3
+        if: success()
+        uses: actions/upload-artifact@v4
         with:
           name: Mindustry-IPA
-          path: build/libs/*.ipa
+          path: |
+            **/*.ipa
+          if-no-files-found: error
+```
