@@ -32,17 +32,41 @@ jobs:
           echo "=== Arc commit ==="
           git rev-parse HEAD
 
-      - name: Prepare MetalANGLEKit
+      - name: Build Arc iOS natives and prepare MetalANGLEKit
         run: |
           set -e
           cd ../Arc
           chmod +x gradlew
+
+          # 1) MetalANGLEKit (this wipes backend-robovm/res/META-INF/robovm/ios/libs, so it has to run first)
           ./gradlew :backends:backend-robovm:extractMetalANGLEKit --stacktrace
+
+          # 2) arc.xcframework (the "arc" framework that ios/robovm.xml asks for)
+          ./gradlew :arc-core:jnigenBuildAllIOS --stacktrace
+
+          XCF=$(find . -type d -name "arc.xcframework" -not -path "./backends/*" | head -n 1)
+          if [ -z "$XCF" ]; then
+            echo "ERROR: arc.xcframework was not generated"
+            exit 1
+          fi
+          echo "=== arc.xcframework found at: $XCF ==="
+          find "$XCF" -maxdepth 2
+
+          # 3) put it next to MetalANGLEKit so it is packaged into the backend jar
+          cp -R "$XCF" backends/backend-robovm/res/META-INF/robovm/ios/libs/
+
+          # 4) build the jar
           ./gradlew :backends:backend-robovm:jar --stacktrace
-          echo "=== Verify MetalANGLEKit files ==="
-          find backends/backend-robovm -iname "*MetalANGLEKit*" -print
+
           echo "=== Verify packaged resources ==="
-          unzip -l backends/backend-robovm/build/libs/backend-robovm-1.0.jar | grep -i "MetalANGLEKit"
+          JAR=backends/backend-robovm/build/libs/backend-robovm-1.0.jar
+          unzip -l "$JAR" > /tmp/jar-listing.txt
+          grep -i "MetalANGLEKit" /tmp/jar-listing.txt | head -n 5 || true
+          grep -i "arc.xcframework" /tmp/jar-listing.txt | head -n 5 || true
+          if ! grep -q -i "arc.xcframework" /tmp/jar-listing.txt; then
+            echo "ERROR: arc.xcframework is not inside the backend-robovm jar"
+            exit 1
+          fi
 
       - name: Disable iOS signing
         run: |
