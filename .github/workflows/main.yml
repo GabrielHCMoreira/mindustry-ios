@@ -14,7 +14,7 @@ jobs:
     runs-on: macos-15
 
     steps:
-      - name: Download source code
+      - name: Download Mindustry source
         uses: actions/checkout@v5
 
       - name: Install Java 17
@@ -24,57 +24,72 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: Check project configuration
+      - name: Download matching Arc source
         run: |
-          echo "=== iOS build configuration ==="
-          grep -n -i "iosSkipSigning" ios/build.gradle || true
-          echo "=== Gradle wrapper ==="
-          chmod +x gradlew
-          ./gradlew --version
+          if [ ! -d ../Arc/.git ]; then
+            git clone https://github.com/Anuken/Arc.git ../Arc
+          fi
 
-      - name: Disable iOS signing
+          git -C ../Arc fetch origin
+          git -C ../Arc checkout 7445105cd2
+
+          echo "=== Arc native libraries ==="
+          find ../Arc/natives -type f \
+            \( -name "*.a" -o -name "*.framework" -o -name "*.xcframework" \) \
+            -print || true
+
+      - name: Configure iOS signing
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
           path = Path("ios/build.gradle")
-          text = path.read_text()
+          content = path.read_text()
 
-          if "iosSkipSigning = false" in text:
-              text = text.replace(
+          if "iosSkipSigning = false" in content:
+              content = content.replace(
                   "iosSkipSigning = false",
                   "iosSkipSigning = true",
                   1
               )
-              path.write_text(text)
-              print("Changed iosSkipSigning to true.")
-          elif "iosSkipSigning = true" in text:
+              path.write_text(content)
+              print("iOS signing disabled.")
+          elif "iosSkipSigning = true" in content:
               print("iOS signing is already disabled.")
           else:
-              print("Signing setting not found; inspecting build file:")
-              for i, line in enumerate(text.splitlines(), 1):
-                  if "sign" in line.lower() or "robovm" in line.lower():
-                      print(f"{i}: {line}")
+              print("Signing setting not found; checking configuration.")
+              for number, line in enumerate(content.splitlines(), 1):
+                  if "sign" in line.lower():
+                      print(f"{number}: {line}")
           PY
 
-      - name: Build Mindustry and create IPA
-        id: build
+      - name: Build Mindustry assets
         run: |
-          set -o pipefail
+          chmod +x gradlew
           ./gradlew :tools:pack --stacktrace
+
+      - name: Copy iOS native libraries
+        run: |
+          ./gradlew :ios:copyNatives --stacktrace
+
+          echo "=== Checking freetype library ==="
+          find ios ../Arc -name "libarc-freetype.a" -print
+
+      - name: Build iOS IPA
+        run: |
           ./gradlew :ios:createIPA --stacktrace --info
 
-      - name: Find generated IPA
+      - name: Inspect build outputs
         if: always()
         run: |
           echo "=== IPA files ==="
-          find "$GITHUB_WORKSPACE" -type f -iname "*.ipa" -print
-          echo "=== Build output directories ==="
-          find "$GITHUB_WORKSPACE" -maxdepth 5 -type d \
-            \( -name build -o -name export -o -name output \) -print
-          echo "=== Candidate packages ==="
-          find "$GITHUB_WORKSPACE" -type f \
-            \( -name "*.zip" -o -name "*.app" \) -print | head -100
+          find . -type f -iname "*.ipa" -print
+
+          echo "=== App bundles ==="
+          find . -type d -name "*.app" -print
+
+          echo "=== Native freetype library ==="
+          find ios ../Arc -name "libarc-freetype.a" -print
 
       - name: Upload IPA
         if: success()
